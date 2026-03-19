@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="ru" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="env.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Замер скорости</title>
+    <style>
+        /* Строгий минимализм (Apple Style) */
+        :root[data-theme="light"] {
+            --bg-color: #f2f2f7;
+            --card-bg: #ffffff;
+            --border: 1px solid rgba(0, 0, 0, 0.05);
+            --text-main: #1d1d1f; 
+            --text-muted: #86868b; 
+            --accent: #007aff; 
+            --bar-bg: rgba(0, 0, 0, 0.05); 
+            --shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+            --toggle-bg: rgba(0, 0, 0, 0.05);
+        }
+        :root[data-theme="dark"] {
+            --bg-color: #000000;
+            --card-bg: #1c1c1e;
+            --border: 1px solid rgba(255, 255, 255, 0.08);
+            --text-main: #f5f5f7; 
+            --text-muted: #a1a1a6; 
+            --accent: #0a84ff; 
+            --bar-bg: rgba(255, 255, 255, 0.1); 
+            --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            --toggle-bg: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color); color: var(--text-main);
+            margin: 0; display: flex; justify-content: center; align-items: center;
+            min-height: 100vh; transition: background-color 0.3s, color 0.3s;
+        }
+
+        .container {
+            background: var(--card-bg);
+            width: 90%; max-width: 420px;
+            padding: 25px; border-radius: 24px; box-shadow: var(--shadow);
+            border: var(--border); transition: background 0.3s, border 0.3s;
+        }
+
+        .header { display: flex; justify-content: space-between; align-items: center; }
+        .header h2 { margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px;}
+        .theme-toggle {
+            background: var(--toggle-bg); border: none; font-size: 20px; cursor: pointer;
+            width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; 
+            justify-content: center; transition: transform 0.2s, background 0.3s;
+        }
+        .theme-toggle:active { transform: scale(0.8); }
+
+        /* Блок информации о сети и скрытие IP */
+        .network-info {
+            text-align: left; font-size: 13px; color: var(--text-muted);
+            margin-top: 5px; margin-bottom: 25px; min-height: 15px; font-weight: 500;
+        }
+        .ip-masked {
+            filter: blur(4px); 
+            cursor: pointer;
+            transition: filter 0.3s ease;
+            user-select: none;
+        }
+        .ip-masked.revealed {
+            filter: blur(0); 
+        }
+        .ip-hint { font-size: 10px; opacity: 0.6; margin-left: 2px; cursor: pointer;}
+
+        /* Прогресс-бары */
+        .metric { margin-bottom: 20px; }
+        .metric-header { display: flex; justify-content: space-between; margin-bottom: 8px; }
+        .label { color: var(--text-muted); font-size: 14px; font-weight: 500; }
+        .value { font-size: 18px; font-weight: bold; font-variant-numeric: tabular-nums; }
+        
+        .progress-track {
+            width: 100%; height: 8px; background: var(--bar-bg);
+            border-radius: 4px; overflow: hidden; position: relative;
+        }
+        .progress-fill {
+            height: 100%; width: 0%; background: var(--accent);
+            border-radius: 4px; transition: width 0.2s linear;
+        }
+        .ping-fill { background: #34c759; }
+        .dl-fill { background: #007aff; }
+        .ul-fill { background: #af52de; }
+
+        #quality-box {
+            text-align: center; margin: 20px 0; padding: 15px;
+            border-radius: 12px; background: rgba(52, 199, 89, 0.15);
+            color: #34c759; font-weight: 600; display: none; font-size: 14px; line-height: 1.4;
+        }
+
+        .btn-start {
+            background: var(--accent); color: #fff; border: none;
+            padding: 16px; width: 100%; font-size: 18px; font-weight: 600;
+            border-radius: 16px; cursor: pointer; transition: opacity 0.2s, transform 0.1s; margin-top: 10px;
+        }
+        .btn-start:active { transform: scale(0.97); }
+        .btn-start:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        /* Аккордеон сервисов */
+        details { margin-top: 20px; background: var(--bar-bg); border-radius: 16px; overflow: hidden; }
+        summary {
+            padding: 15px; font-weight: 600; cursor: pointer; user-select: none;
+            display: flex; justify-content: space-between; align-items: center; list-style: none;
+        }
+        summary::-webkit-details-marker { display: none; }
+        summary::after { content: '▼'; font-size: 12px; transition: transform 0.3s; color: var(--text-muted); }
+        details[open] summary::after { transform: rotate(180deg); }
+        
+        .services-list { padding: 0 15px 15px 15px; }
+        .service-item {
+            display: flex; justify-content: space-between; padding: 10px 0;
+            border-bottom: 1px solid rgba(128,128,128,0.2); font-size: 15px;
+        }
+        .service-item:last-child { border-bottom: none; }
+        .service-link { color: var(--text-main); text-decoration: none; font-weight: 500; }
+        .service-link:hover { color: var(--accent); text-decoration: underline; }
+        .status-ok { color: #34c759; font-weight: 500;} 
+        .status-warn { color: #ff9f0a; font-weight: 500;} 
+        .status-error { color: #ff453a; font-weight: 500;}
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h2>Замер скорости</h2>
+        <button class="theme-toggle" onclick="toggleTheme()" id="themeBtn">🌙</button>
+    </div>
+    
+    <div class="network-info" id="networkInfo">Определение провайдера...</div>
+    
+    <div class="metric">
+        <div class="metric-header">
+            <span class="label">Пинг</span>
+            <span class="value" id="pingValue">- мс</span>
+        </div>
+        <div class="progress-track"><div class="progress-fill ping-fill" id="pingBar"></div></div>
+    </div>
+
+    <div class="metric">
+        <div class="metric-header">
+            <span class="label">Входящая</span>
+            <span class="value" id="downloadValue">- Мбит/с</span>
+        </div>
+        <div class="progress-track"><div class="progress-fill dl-fill" id="downloadBar"></div></div>
+    </div>
+
+    <div class="metric">
+        <div class="metric-header">
+            <span class="label">Исходящая</span>
+            <span class="value" id="uploadValue">- Мбит/с</span>
+        </div>
+        <div class="progress-track"><div class="progress-fill ul-fill" id="uploadBar"></div></div>
+    </div>
+
+    <div id="quality-box"></div>
+
+    <details id="services-details">
+        <summary>Доступность сервисов</summary>
+        <div class="services-list">
+            <div class="service-item">
+                <a href="#" onclick="openLink('https://vk.com')" class="service-link">ВКонтакте</a>
+                <span id="status-vk">⏳</span>
+            </div>
+            <div class="service-item">
+                <a href="#" onclick="openLink('https://telegram.org')" class="service-link">Telegram</a>
+                <span id="status-tg">⏳</span>
+            </div>
+            <div class="service-item">
+                <a href="#" onclick="openLink('https://youtube.com')" class="service-link">YouTube</a>
+                <span id="status-yt">⏳</span>
+            </div>
+        </div>
+    </details>
+
+    <button class="btn-start" id="startBtn" onclick="startTest()">Начать замер</button>
+</div>
+
+<script>
+    const tg = window.Telegram.WebApp;
+    tg.expand(); 
+
+    // URL ТВОЕГО БЭКЕНДА НА JAVA
+    const BASE_URL = window._env_?.API_URL || window.location.origin + '/api/speedtest';
+
+    // Тема (переключатель)
+    let isDark = true;
+    function toggleTheme() {
+        isDark = !isDark;
+        document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+        document.getElementById('themeBtn').innerText = isDark ? '🌙' : '☀️';
+        if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+    }
+
+    // Безопасное открытие ссылок
+    function openLink(url) {
+        if (tg.initDataUnsafe && Object.keys(tg.initDataUnsafe).length > 0) {
+            tg.openLink(url);
+        } else {
+            window.open(url, '_blank');
+        }
+    }
+
+    // Получение IPv4 и названия провайдера
+    async function fetchNetworkInfo() {
+        try {
+            const res = await fetch('https://ipv4.geojs.io/v1/ip/geo.json');
+            const data = await res.json();
+            let org = data.organization_name || data.organization || "Неизвестная сеть";
+            
+            document.getElementById('networkInfo').innerHTML = 
+                `IP: <span class="ip-masked" id="ipSpan" onclick="toggleIp()">${data.ip}</span> <span class="ip-hint" onclick="toggleIp()"></span> • ${org}`;
+        } catch (e) {
+            document.getElementById('networkInfo').innerText = "Сеть готова к проверке";
+        }
+    }
+    fetchNetworkInfo();
+
+    // Переключение видимости (размытия) IP-адреса
+    function toggleIp() {
+        const ipSpan = document.getElementById('ipSpan');
+        if (ipSpan) {
+            ipSpan.classList.toggle('revealed');
+            if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+        }
+    }
+
+    // ГЛАВНЫЙ ЗАПУСК
+    async function startTest() {
+        const btn = document.getElementById('startBtn');
+        btn.disabled = true;
+        btn.innerText = "Идет замер...";
+        document.getElementById('quality-box').style.display = 'none';
+        document.getElementById('services-details').removeAttribute('open');
+
+        if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
+
+        ['pingValue', 'downloadValue', 'uploadValue'].forEach(id => document.getElementById(id).innerText = "-");
+        ['pingBar', 'downloadBar', 'uploadBar'].forEach(id => document.getElementById(id).style.width = '0%');
+        ['status-vk', 'status-tg', 'status-yt'].forEach(id => document.getElementById(id).innerText = "⏳");
+
+        try {
+            checkServices(); 
+            
+            let finalPing = await testPing();
+            let finalDl = await testDownload(150); 
+            let finalUl = await testUpload(100);   
+
+            analyzeQuality(finalPing, finalDl, finalUl);
+
+            if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+
+        } catch (e) {
+            console.error(e);
+            alert("Ошибка сети! Проверьте подключение.");
+            if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
+        }
+
+        btn.disabled = false;
+        btn.innerText = "Повторить замер";
+    }
+
+    // Замер Пинга
+    async function testPing() {
+        let startTime = performance.now();
+        await fetch(`${BASE_URL}/ping?t=${Date.now()}`);
+        let ping = Math.round(performance.now() - startTime);
+        
+        document.getElementById('pingValue').innerText = `${ping} мс`;
+        let barWidth = Math.min((ping / 150) * 100, 100);
+        document.getElementById('pingBar').style.width = `${barWidth}%`;
+        
+        await new Promise(r => setTimeout(r, 500)); 
+        return ping;
+    }
+
+    // Замер Входящей скорости
+    function testDownload(sizeMb) {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('GET', `${BASE_URL}/download?size=${sizeMb}&t=${Date.now()}`, true);
+            xhr.responseType = 'blob'; 
+            let startTime = performance.now();
+
+            xhr.onprogress = function(event) {
+                if (event.lengthComputable) {
+                    let percent = (event.loaded / event.total) * 100;
+                    document.getElementById('downloadBar').style.width = `${percent}%`;
+
+                    let durationSec = (performance.now() - startTime) / 1000;
+                    if (durationSec > 0.5) {
+                        let speed = ((event.loaded / 1024 / 1024) * 8 / durationSec).toFixed(1);
+                        document.getElementById('downloadValue').innerText = `${speed} Мбит/с`;
+                    }
+                }
+            };
+
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    let durationSec = (performance.now() - startTime) / 1000;
+                    let finalSpeed = parseFloat(((sizeMb * 8) / durationSec).toFixed(1));
+                    document.getElementById('downloadValue').innerText = `${finalSpeed} Мбит/с`;
+                    document.getElementById('downloadBar').style.width = `100%`;
+                    resolve(finalSpeed);
+                } else reject();
+            };
+            xhr.onerror = reject;
+            xhr.send();
+        });
+    }
+
+    // Замер Исходящей скорости
+    function testUpload(sizeMb) {
+        return new Promise((resolve, reject) => {
+            const totalBytes = sizeMb * 1024 * 1024;
+            const data = new Uint8Array(totalBytes);
+            for (let i = 0; i < totalBytes; i += 8192) { data[i] = Math.random() * 255; }
+
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', `${BASE_URL}/upload`, true);
+            let startTime = performance.now();
+
+            xhr.upload.onprogress = function(event) {
+                if (event.lengthComputable) {
+                    let percent = (event.loaded / event.total) * 100;
+                    document.getElementById('uploadBar').style.width = `${percent}%`;
+
+                    let durationSec = (performance.now() - startTime) / 1000;
+                    if (durationSec > 0.5) {
+                        let speed = ((event.loaded / 1024 / 1024) * 8 / durationSec).toFixed(1);
+                        document.getElementById('uploadValue').innerText = `${speed} Мбит/с`;
+                    }
+                }
+            };
+
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    let durationSec = (performance.now() - startTime) / 1000;
+                    let finalSpeed = parseFloat(((sizeMb * 8) / durationSec).toFixed(1));
+                    document.getElementById('uploadValue').innerText = `${finalSpeed} Мбит/с`;
+                    document.getElementById('uploadBar').style.width = `100%`;
+                    resolve(finalSpeed);
+                } else reject();
+            };
+            xhr.onerror = reject;
+            xhr.send(data);
+        });
+    }
+
+    // Вердикт
+    function analyzeQuality(ping, dl, ul) {
+        const box = document.getElementById('quality-box');
+        let text = ""; let color = "";
+
+        if (dl > 50 && ping < 60) {
+            text = "🚀 Отличная связь!<br>Идеально для 4K-видео и онлайн-игр.";
+            color = "#34c759";
+            box.style.background = "rgba(52, 199, 89, 0.15)";
+        } else if (dl > 15 && ping < 150) {
+            text = "👍 Хороший интернет.<br>Хватит для соцсетей и видео 1080p.";
+            color = "#ff9f0a";
+            box.style.background = "rgba(255, 159, 10, 0.15)";
+        } else {
+            text = "🐌 Медленное соединение.<br>Возможны долгие загрузки и обрывы связи.";
+            color = "#ff453a";
+            box.style.background = "rgba(255, 69, 58, 0.15)";
+        }
+
+        box.style.color = color;
+        box.innerHTML = text;
+        box.style.display = 'block';
+    }
+
+    // Проверка сервисов по иконкам (Favicons)
+    function checkServices() {
+        pingService('https://vk.com/favicon.ico', 'status-vk');
+        pingService('https://telegram.org/favicon.ico', 'status-tg');
+        pingService('https://www.youtube.com/favicon.ico', 'status-yt');
+    }
+
+    function pingService(url, elementId) {
+        const el = document.getElementById(elementId);
+        const img = new Image();
+        const startTime = performance.now();
+        
+        const timeoutId = setTimeout(() => {
+            img.src = ""; 
+            el.innerHTML = "<span class='status-error'>❌ Таймаут</span>";
+        }, 3000);
+
+        img.onload = function() {
+            clearTimeout(timeoutId);
+            const duration = Math.round(performance.now() - startTime);
+            if (duration < 500) {
+                el.innerHTML = `<span class='status-ok'>✅ ${duration} мс</span>`;
+            } else {
+                el.innerHTML = `<span class='status-warn'>⚠️ ${duration} мс</span>`;
+            }
+        };
+
+        img.onerror = function() {
+            clearTimeout(timeoutId);
+            el.innerHTML = "<span class='status-error'>❌ Ошибка</span>";
+        };
+
+        img.src = url + "?t=" + Date.now();
+    }
+</script>
+</body>
+</html>
