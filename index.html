@@ -187,7 +187,7 @@
     tg.expand(); 
 
     // URL ТВОЕГО БЭКЕНДА НА JAVA
-    const BASE_URL = 'https://berenice-unossified-dorinda.ngrok-free.dev/api/speedtest';
+    const BASE_URL = '{{NGROK_URL}}';
 
     // Тема (переключатель)
     let isDark = true;
@@ -269,7 +269,12 @@
     // Замер Пинга
     async function testPing() {
         let startTime = performance.now();
-        await fetch(`${BASE_URL}/ping?t=${Date.now()}`);
+        // await fetch(`${BASE_URL}/ping?t=${Date.now()}`);
+        await fetch(`${BASE_URL}/ping?t=${Date.now()}`, {
+            headers: {
+                'ngrok-skip-browser-warning': 'true'
+            }
+        });
         let ping = Math.round(performance.now() - startTime);
         
         document.getElementById('pingValue').innerText = `${ping} мс`;
@@ -285,6 +290,7 @@
         return new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
             xhr.open('GET', `${BASE_URL}/download?size=${sizeMb}&t=${Date.now()}`, true);
+            xhr.setRequestHeader('ngrok-skip-browser-warning', 'true');
             xhr.responseType = 'blob'; 
             let startTime = performance.now();
 
@@ -324,6 +330,7 @@
 
             const xhr = new XMLHttpRequest();
             xhr.open('POST', `${BASE_URL}/upload`, true);
+            xhr.setRequestHeader('ngrok-skip-browser-warning', 'true');
             let startTime = performance.now();
 
             xhr.upload.onprogress = function(event) {
