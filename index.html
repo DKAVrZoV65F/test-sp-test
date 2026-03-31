@@ -5,7 +5,7 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="env.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Замер скорости</title>
+    <title>Проверка сети</title>
     <style>
         /* Строгий минимализм (Apple Style) */
         :root[data-theme="light"] {
@@ -54,7 +54,7 @@
         }
         .theme-toggle:active { transform: scale(0.8); }
 
-        /* Блок информации о сети и скрытие IP */
+        /* Блок информации о сети */
         .network-info {
             text-align: left; font-size: 13px; color: var(--text-muted);
             margin-top: 5px; margin-bottom: 25px; min-height: 15px; font-weight: 500;
@@ -69,38 +69,6 @@
             filter: blur(0); 
         }
         .ip-hint { font-size: 10px; opacity: 0.6; margin-left: 2px; cursor: pointer;}
-
-        /* Прогресс-бары */
-        .metric { margin-bottom: 20px; }
-        .metric-header { display: flex; justify-content: space-between; margin-bottom: 8px; }
-        .label { color: var(--text-muted); font-size: 14px; font-weight: 500; }
-        .value { font-size: 18px; font-weight: bold; font-variant-numeric: tabular-nums; }
-        
-        .progress-track {
-            width: 100%; height: 8px; background: var(--bar-bg);
-            border-radius: 4px; overflow: hidden; position: relative;
-        }
-        .progress-fill {
-            height: 100%; width: 0%; background: var(--accent);
-            border-radius: 4px; transition: width 0.2s linear;
-        }
-        .ping-fill { background: #34c759; }
-        .dl-fill { background: #007aff; }
-        .ul-fill { background: #af52de; }
-
-        #quality-box {
-            text-align: center; margin: 20px 0; padding: 15px;
-            border-radius: 12px; background: rgba(52, 199, 89, 0.15);
-            color: #34c759; font-weight: 600; display: none; font-size: 14px; line-height: 1.4;
-        }
-
-        .btn-start {
-            background: var(--accent); color: #fff; border: none;
-            padding: 16px; width: 100%; font-size: 18px; font-weight: 600;
-            border-radius: 16px; cursor: pointer; transition: opacity 0.2s, transform 0.1s; margin-top: 10px;
-        }
-        .btn-start:active { transform: scale(0.97); }
-        .btn-start:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
         /* Аккордеон сервисов */
         details { margin-top: 20px; background: var(--bar-bg); border-radius: 16px; overflow: hidden; }
@@ -123,45 +91,35 @@
         .status-ok { color: #34c759; font-weight: 500;} 
         .status-warn { color: #ff9f0a; font-weight: 500;} 
         .status-error { color: #ff453a; font-weight: 500;}
+
+        .btn-refresh {
+            background: var(--accent); color: #fff; border: none;
+            padding: 16px; width: 100%; font-size: 18px; font-weight: 600;
+            border-radius: 16px; cursor: pointer; transition: opacity 0.2s, transform 0.1s; margin-top: 15px;
+        }
+        .btn-refresh:active { transform: scale(0.97); }
+        .btn-refresh:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        .status-indicator {
+            text-align: center; padding: 12px; margin: 20px 0;
+            border-radius: 12px; font-weight: 600; font-size: 14px; line-height: 1.4;
+        }
+        .status-good { background: rgba(52, 199, 89, 0.15); color: #34c759; }
+        .status-mixed { background: rgba(255, 159, 10, 0.15); color: #ff9f0a; }
+        .status-bad { background: rgba(255, 69, 58, 0.15); color: #ff453a; }
     </style>
 </head>
 <body>
 
 <div class="container">
     <div class="header">
-        <h2>Замер скорости</h2>
+        <h2>Проверка сети</h2>
         <button class="theme-toggle" onclick="toggleTheme()" id="themeBtn">🌙</button>
     </div>
     
     <div class="network-info" id="networkInfo">Определение провайдера...</div>
-    
-    <div class="metric">
-        <div class="metric-header">
-            <span class="label">Пинг</span>
-            <span class="value" id="pingValue">- мс</span>
-        </div>
-        <div class="progress-track"><div class="progress-fill ping-fill" id="pingBar"></div></div>
-    </div>
 
-    <div class="metric">
-        <div class="metric-header">
-            <span class="label">Входящая</span>
-            <span class="value" id="downloadValue">- Мбит/с</span>
-        </div>
-        <div class="progress-track"><div class="progress-fill dl-fill" id="downloadBar"></div></div>
-    </div>
-
-    <div class="metric">
-        <div class="metric-header">
-            <span class="label">Исходящая</span>
-            <span class="value" id="uploadValue">- Мбит/с</span>
-        </div>
-        <div class="progress-track"><div class="progress-fill ul-fill" id="uploadBar"></div></div>
-    </div>
-
-    <div id="quality-box"></div>
-
-    <details id="services-details">
+    <details id="services-details" open>
         <summary>Доступность сервисов</summary>
         <div class="services-list">
             <div class="service-item">
@@ -179,15 +137,14 @@
         </div>
     </details>
 
-    <button class="btn-start" id="startBtn" onclick="startTest()">Начать замер</button>
+    <div id="statusIndicator" class="status-indicator" style="display: none;"></div>
+
+    <button class="btn-refresh" id="refreshBtn" onclick="refreshNetwork()">Обновить</button>
 </div>
 
 <script>
     const tg = window.Telegram.WebApp;
     tg.expand(); 
-
-    // URL ТВОЕГО БЭКЕНДА НА JAVA
-    const BASE_URL = 'https://berenice-unossified-dorinda.ngrok-free.dev/api/speedtest';
 
     // Тема (переключатель)
     let isDark = true;
@@ -215,176 +172,52 @@
             let org = data.organization_name || data.organization || "Неизвестная сеть";
             
             document.getElementById('networkInfo').innerHTML = 
-                `IP: <span class="ip-masked" id="ipSpan" onclick="toggleIp()">${data.ip}</span> <span class="ip-hint" onclick="toggleIp()"></span> • ${org}`;
+                `IP: <span class="ip-masked" id="ipSpan" onclick="toggleIp()">${data.ip}</span> <span class="ip-hint" onclick="toggleIp()">(показать)</span> • ${org}`;
         } catch (e) {
             document.getElementById('networkInfo').innerText = "Сеть готова к проверке";
         }
     }
-    fetchNetworkInfo();
 
-    // Переключение видимости (размытия) IP-адреса
+    // Переключение видимости IP
     function toggleIp() {
         const ipSpan = document.getElementById('ipSpan');
         if (ipSpan) {
             ipSpan.classList.toggle('revealed');
+            document.querySelector('.ip-hint').textContent = ipSpan.classList.contains('revealed') ? '(скрыть)' : '(показать)';
             if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
         }
     }
 
-    // ГЛАВНЫЙ ЗАПУСК
-    async function startTest() {
-        const btn = document.getElementById('startBtn');
+    // ОСНОВНАЯ ФУНКЦИЯ ОБНОВЛЕНИЯ
+    async function refreshNetwork() {
+        const btn = document.getElementById('refreshBtn');
         btn.disabled = true;
-        btn.innerText = "Идет замер...";
-        document.getElementById('quality-box').style.display = 'none';
-        document.getElementById('services-details').removeAttribute('open');
+        btn.innerText = "Обновление...";
+        document.getElementById('statusIndicator').style.display = 'none';
 
         if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('medium');
 
-        ['pingValue', 'downloadValue', 'uploadValue'].forEach(id => document.getElementById(id).innerText = "-");
-        ['pingBar', 'downloadBar', 'uploadBar'].forEach(id => document.getElementById(id).style.width = '0%');
+        // Сброс статусов сервисов
         ['status-vk', 'status-tg', 'status-yt'].forEach(id => document.getElementById(id).innerText = "⏳");
 
         try {
-            checkServices(); 
+            // Параллельно обновляем IP и проверяем сервисы
+            await Promise.all([
+                fetchNetworkInfo(),
+                checkServices()
+            ]);
             
-            let finalPing = await testPing();
-            let finalDl = await testDownload(150); 
-            let finalUl = await testUpload(100);   
-
-            analyzeQuality(finalPing, finalDl, finalUl);
-
             if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
-
         } catch (e) {
             console.error(e);
-            alert("Ошибка сети! Проверьте подключение.");
             if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('error');
         }
 
         btn.disabled = false;
-        btn.innerText = "Повторить замер";
+        btn.innerText = "Обновить";
     }
 
-    // Замер Пинга
-    async function testPing() {
-        let startTime = performance.now();
-        // await fetch(`${BASE_URL}/ping?t=${Date.now()}`);
-        await fetch(`${BASE_URL}/ping?t=${Date.now()}`, {
-            headers: {
-                'ngrok-skip-browser-warning': 'true'
-            }
-        });
-        let ping = Math.round(performance.now() - startTime);
-        
-        document.getElementById('pingValue').innerText = `${ping} мс`;
-        let barWidth = Math.min((ping / 150) * 100, 100);
-        document.getElementById('pingBar').style.width = `${barWidth}%`;
-        
-        await new Promise(r => setTimeout(r, 500)); 
-        return ping;
-    }
-
-    // Замер Входящей скорости
-    function testDownload(sizeMb) {
-        return new Promise((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            xhr.open('GET', `${BASE_URL}/download?size=${sizeMb}&t=${Date.now()}`, true);
-            xhr.setRequestHeader('ngrok-skip-browser-warning', 'true');
-            xhr.responseType = 'blob'; 
-            let startTime = performance.now();
-
-            xhr.onprogress = function(event) {
-                if (event.lengthComputable) {
-                    let percent = (event.loaded / event.total) * 100;
-                    document.getElementById('downloadBar').style.width = `${percent}%`;
-
-                    let durationSec = (performance.now() - startTime) / 1000;
-                    if (durationSec > 0.5) {
-                        let speed = ((event.loaded / 1024 / 1024) * 8 / durationSec).toFixed(1);
-                        document.getElementById('downloadValue').innerText = `${speed} Мбит/с`;
-                    }
-                }
-            };
-
-            xhr.onload = function() {
-                if (xhr.status === 200) {
-                    let durationSec = (performance.now() - startTime) / 1000;
-                    let finalSpeed = parseFloat(((sizeMb * 8) / durationSec).toFixed(1));
-                    document.getElementById('downloadValue').innerText = `${finalSpeed} Мбит/с`;
-                    document.getElementById('downloadBar').style.width = `100%`;
-                    resolve(finalSpeed);
-                } else reject();
-            };
-            xhr.onerror = reject;
-            xhr.send();
-        });
-    }
-
-    // Замер Исходящей скорости
-    function testUpload(sizeMb) {
-        return new Promise((resolve, reject) => {
-            const totalBytes = sizeMb * 1024 * 1024;
-            const data = new Uint8Array(totalBytes);
-            for (let i = 0; i < totalBytes; i += 8192) { data[i] = Math.random() * 255; }
-
-            const xhr = new XMLHttpRequest();
-            xhr.open('POST', `${BASE_URL}/upload`, true);
-            xhr.setRequestHeader('ngrok-skip-browser-warning', 'true');
-            let startTime = performance.now();
-
-            xhr.upload.onprogress = function(event) {
-                if (event.lengthComputable) {
-                    let percent = (event.loaded / event.total) * 100;
-                    document.getElementById('uploadBar').style.width = `${percent}%`;
-
-                    let durationSec = (performance.now() - startTime) / 1000;
-                    if (durationSec > 0.5) {
-                        let speed = ((event.loaded / 1024 / 1024) * 8 / durationSec).toFixed(1);
-                        document.getElementById('uploadValue').innerText = `${speed} Мбит/с`;
-                    }
-                }
-            };
-
-            xhr.onload = function() {
-                if (xhr.status === 200) {
-                    let durationSec = (performance.now() - startTime) / 1000;
-                    let finalSpeed = parseFloat(((sizeMb * 8) / durationSec).toFixed(1));
-                    document.getElementById('uploadValue').innerText = `${finalSpeed} Мбит/с`;
-                    document.getElementById('uploadBar').style.width = `100%`;
-                    resolve(finalSpeed);
-                } else reject();
-            };
-            xhr.onerror = reject;
-            xhr.send(data);
-        });
-    }
-
-    // Вердикт
-    function analyzeQuality(ping, dl, ul) {
-        const box = document.getElementById('quality-box');
-        let text = ""; let color = "";
-
-        if (dl > 50 && ping < 60) {
-            text = "🚀 Отличная связь!<br>Идеально для 4K-видео и онлайн-игр.";
-            color = "#34c759";
-            box.style.background = "rgba(52, 199, 89, 0.15)";
-        } else if (dl > 15 && ping < 150) {
-            text = "👍 Хороший интернет.<br>Хватит для соцсетей и видео 1080p.";
-            color = "#ff9f0a";
-            box.style.background = "rgba(255, 159, 10, 0.15)";
-        } else {
-            text = "🐌 Медленное соединение.<br>Возможны долгие загрузки и обрывы связи.";
-            color = "#ff453a";
-            box.style.background = "rgba(255, 69, 58, 0.15)";
-        }
-
-        box.style.color = color;
-        box.innerHTML = text;
-        box.style.display = 'block';
-    }
-
-    // Проверка сервисов по иконкам (Favicons)
+    // Проверка сервисов по иконкам (Favicons) С МС!
     function checkServices() {
         pingService('https://vk.com/favicon.ico', 'status-vk');
         pingService('https://telegram.org/favicon.ico', 'status-tg');
@@ -399,6 +232,7 @@
         const timeoutId = setTimeout(() => {
             img.src = ""; 
             el.innerHTML = "<span class='status-error'>❌ Таймаут</span>";
+            updateStatusIndicator();
         }, 3000);
 
         img.onload = function() {
@@ -409,15 +243,47 @@
             } else {
                 el.innerHTML = `<span class='status-warn'>⚠️ ${duration} мс</span>`;
             }
+            updateStatusIndicator();
         };
 
         img.onerror = function() {
             clearTimeout(timeoutId);
             el.innerHTML = "<span class='status-error'>❌ Ошибка</span>";
+            updateStatusIndicator();
         };
 
         img.src = url + "?t=" + Date.now();
     }
+
+    // Общий статус сети (по доступности, без учета ms)
+    function updateStatusIndicator() {
+        const statuses = {
+            vk: !document.getElementById('status-vk').innerHTML.includes('❌') && !document.getElementById('status-vk').innerHTML.includes('⏳'),
+            tg: !document.getElementById('status-tg').innerHTML.includes('❌') && !document.getElementById('status-tg').innerHTML.includes('⏳'),
+            yt: !document.getElementById('status-yt').innerHTML.includes('❌') && !document.getElementById('status-yt').innerHTML.includes('⏳')
+        };
+
+        const okCount = Object.values(statuses).filter(Boolean).length;
+        const box = document.getElementById('statusIndicator');
+        
+        if (okCount === 3) {
+            box.className = 'status-indicator status-good';
+            box.innerHTML = '🚀 Все сервисы доступны';
+        } else if (okCount >= 2) {
+            box.className = 'status-indicator status-mixed';
+            box.innerHTML = '👍 Большинство сервисов работает';
+        } else {
+            box.className = 'status-indicator status-bad';
+            box.innerHTML = '🐌 Проблемы с доступностью';
+        }
+        
+        box.style.display = 'block';
+    }
+
+    // Автозапуск при загрузке
+    window.addEventListener('load', () => {
+        refreshNetwork();
+    });
 </script>
 </body>
 </html>
